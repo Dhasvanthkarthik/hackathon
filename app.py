@@ -1,63 +1,56 @@
-import os
-import re
 import pandas as pd
 from sentence_transformers import SentenceTransformer, util
 from rapidfuzz import fuzz
 import streamlit as st
+import re, os
 
 # ----------------------------
 # CONFIG
 # ----------------------------
 st.set_page_config(page_title="Hackathon Unified App", page_icon="🚀", layout="wide")
 
-# Base directory for project files
-BASE_DIR = os.path.dirname(__file__)
-DATA_DIR = os.path.join(BASE_DIR, "data")
-
 # ----------------------------
 # Load datasets
 # ----------------------------
 @st.cache_data
 def load_nco_data():
-    nco_file_path = os.path.join(DATA_DIR, "MOCK_DATA_with_NCO.csv")
-    if not os.path.exists(nco_file_path):
-        st.error(f"❌ NCO CSV not found at {nco_file_path}")
-        return pd.DataFrame()
-    return pd.read_csv(nco_file_path)
+    return pd.read_csv(r"D:\INTEGRATION\project\MOCK_DATA_with_NCO.csv")
 
 @st.cache_data
 def load_survey_data():
-    ctl_file_path = os.path.join(DATA_DIR, "survey_data.ctl")
-
-    if not os.path.exists(ctl_file_path):
-        st.error(f"❌ .ctl file not found: {ctl_file_path}")
-        return pd.DataFrame()
-
+    ctl_file_path = r"D:\INTEGRATION\penta\survey_data.ctl"
+    
     with open(ctl_file_path, "r", encoding="utf-8") as f:
         ctl_content = f.read()
-
+    
     # Extract INFILE path
     infile_match = re.search(r"INFILE\s+'([^']+)'", ctl_content, re.IGNORECASE)
     if not infile_match:
         st.error("❌ No INFILE path found inside the .ctl file")
         return pd.DataFrame()
-
+    
     raw_path = infile_match.group(1).strip()
-
-    # Resolve relative path inside /data
+    
+    # If the path is relative, join with ctl file directory
     if not os.path.isabs(raw_path):
-        data_file_path = os.path.join(DATA_DIR, raw_path)
+        data_file_path = os.path.join(os.path.dirname(ctl_file_path), raw_path)
     else:
         data_file_path = raw_path
-
+    
+    # If the file doesn't exist, try looking in ctl folder
     if not os.path.exists(data_file_path):
-        st.error(f"❌ Data file not found: {data_file_path}")
-        return pd.DataFrame()
-
+        possible_path = os.path.join(os.path.dirname(ctl_file_path), os.path.basename(data_file_path))
+        if os.path.exists(possible_path):
+            data_file_path = possible_path
+        else:
+            st.error(f"❌ Data file not found: {data_file_path}")
+            return pd.DataFrame()
+    
     # Extract delimiter
     delimiter_match = re.search(r"FIELDS TERMINATED BY\s+'([^']+)'", ctl_content, re.IGNORECASE)
     delimiter = delimiter_match.group(1) if delimiter_match else ","
-
+    
+    # Try reading file
     try:
         df = pd.read_csv(data_file_path, delimiter=delimiter, encoding="utf-8", quotechar='"')
         st.success(f"✅ Survey data loaded from: {data_file_path}")
@@ -142,18 +135,15 @@ with tab2:
     st.header("🔍 Multilingual NCO Occupation Search")
 
     df_nco = load_nco_data()
-    if df_nco.empty:
-        st.warning("⚠ NCO data not loaded.")
-    else:
-        model, df_nco = load_model_and_embeddings(df_nco)
+    model, df_nco = load_model_and_embeddings(df_nco)
 
-        query = st.text_input("Enter job title", placeholder="Type here... e.g. மென்பொருள் பொறியாளர் / Software Engineer")
-        top_k = st.slider("Number of results", min_value=1, max_value=10, value=3)
+    query = st.text_input("Enter job title", placeholder="Type here... e.g. மென்பொருள் பொறியாளர் / Software Engineer")
+    top_k = st.slider("Number of results", min_value=1, max_value=10, value=3)
 
-        if st.button("Search NCO"):
-            if query.strip() == "":
-                st.warning("⚠ Please enter a job title to search.")
-            else:
-                results = search_occupation(query, model, df_nco, top_k)
-                st.subheader("Results:")
-                st.dataframe(results, use_container_width=True)
+    if st.button("Search NCO"):
+        if query.strip() == "":
+            st.warning("⚠ Please enter a job title to search.")
+        else:
+            results = search_occupation(query, model, df_nco, top_k)
+            st.subheader("Results:")
+            st.dataframe(results, use_container_width=True)
