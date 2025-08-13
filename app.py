@@ -3,22 +3,35 @@ from sentence_transformers import SentenceTransformer, util
 from rapidfuzz import fuzz
 import streamlit as st
 import re, os
+import pathlib
 
 # ----------------------------
 # CONFIG
 # ----------------------------
 st.set_page_config(page_title="Hackathon Unified App", page_icon="🚀", layout="wide")
 
+# Base directory (works both locally and on Streamlit Cloud)
+BASE_DIR = pathlib.Path(__file__).parent
+DATA_DIR = BASE_DIR / "data"
+
 # ----------------------------
 # Load datasets
 # ----------------------------
 @st.cache_data
 def load_nco_data():
-    return pd.read_csv(r"D:\INTEGRATION\project\MOCK_DATA_with_NCO.csv")
+    nco_path = DATA_DIR / "MOCK_DATA_with_NCO.csv"
+    if not nco_path.exists():
+        st.error(f"❌ NCO data file not found: {nco_path}")
+        return pd.DataFrame()
+    return pd.read_csv(nco_path)
 
 @st.cache_data
 def load_survey_data():
-    ctl_file_path = r"D:\INTEGRATION\penta\survey_data.ctl"
+    ctl_file_path = DATA_DIR / "survey_data.ctl"
+    
+    if not ctl_file_path.exists():
+        st.error(f"❌ .ctl file not found: {ctl_file_path}")
+        return pd.DataFrame()
     
     with open(ctl_file_path, "r", encoding="utf-8") as f:
         ctl_content = f.read()
@@ -31,20 +44,15 @@ def load_survey_data():
     
     raw_path = infile_match.group(1).strip()
     
-    # If the path is relative, join with ctl file directory
+    # Resolve INFILE path relative to the ctl file
     if not os.path.isabs(raw_path):
-        data_file_path = os.path.join(os.path.dirname(ctl_file_path), raw_path)
+        data_file_path = ctl_file_path.parent / raw_path
     else:
-        data_file_path = raw_path
+        data_file_path = pathlib.Path(raw_path)
     
-    # If the file doesn't exist, try looking in ctl folder
-    if not os.path.exists(data_file_path):
-        possible_path = os.path.join(os.path.dirname(ctl_file_path), os.path.basename(data_file_path))
-        if os.path.exists(possible_path):
-            data_file_path = possible_path
-        else:
-            st.error(f"❌ Data file not found: {data_file_path}")
-            return pd.DataFrame()
+    if not data_file_path.exists():
+        st.error(f"❌ Data file not found: {data_file_path}")
+        return pd.DataFrame()
     
     # Extract delimiter
     delimiter_match = re.search(r"FIELDS TERMINATED BY\s+'([^']+)'", ctl_content, re.IGNORECASE)
@@ -135,15 +143,18 @@ with tab2:
     st.header("🔍 Multilingual NCO Occupation Search")
 
     df_nco = load_nco_data()
-    model, df_nco = load_model_and_embeddings(df_nco)
+    if not df_nco.empty:
+        model, df_nco = load_model_and_embeddings(df_nco)
 
-    query = st.text_input("Enter job title", placeholder="Type here... e.g. மென்பொருள் பொறியாளர் / Software Engineer")
-    top_k = st.slider("Number of results", min_value=1, max_value=10, value=3)
+        query = st.text_input("Enter job title", placeholder="Type here... e.g. மென்பொருள் பொறியாளர் / Software Engineer")
+        top_k = st.slider("Number of results", min_value=1, max_value=10, value=3)
 
-    if st.button("Search NCO"):
-        if query.strip() == "":
-            st.warning("⚠ Please enter a job title to search.")
-        else:
-            results = search_occupation(query, model, df_nco, top_k)
-            st.subheader("Results:")
-            st.dataframe(results, use_container_width=True)
+        if st.button("Search NCO"):
+            if query.strip() == "":
+                st.warning("⚠ Please enter a job title to search.")
+            else:
+                results = search_occupation(query, model, df_nco, top_k)
+                st.subheader("Results:")
+                st.dataframe(results, use_container_width=True)
+    else:
+        st.warning("⚠ NCO data not loaded.")
