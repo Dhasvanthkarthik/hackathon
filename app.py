@@ -14,11 +14,16 @@ st.set_page_config(page_title="Hackathon Unified App", page_icon="🚀", layout=
 # ----------------------------
 @st.cache_data
 def load_nco_data():
-    return pd.read_csv(r"D:\INTEGRATION\project\MOCK_DATA_with_NCO.csv")
+    return nco_file_path = os.path.join(BASE_DIR, "data", "MOCK_DATA_with_NCO.csv")
+
 
 @st.cache_data
 def load_survey_data():
-    ctl_file_path = r"D:\INTEGRATION\penta\survey_data.ctl"
+    import os
+BASE_DIR = os.path.dirname(__file__)
+
+ctl_file_path = os.path.join(BASE_DIR, "data", "survey_data.ctl")
+
     
     with open(ctl_file_path, "r", encoding="utf-8") as f:
         ctl_content = f.read()
@@ -147,3 +152,4 @@ with tab2:
             results = search_occupation(query, model, df_nco, top_k)
             st.subheader("Results:")
             st.dataframe(results, use_container_width=True)
+
